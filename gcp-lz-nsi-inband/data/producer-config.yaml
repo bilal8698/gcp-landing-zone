@@ -1,0 +1,245 @@
+# Producer Configuration for NSI In-band Integration
+# This configuration defines the packet inspection infrastructure
+
+producer:
+  project_id: "global-security-project"  # network-security per Carrier LLD
+  # Carrier LLD: 6 global regions for Active-Active deployment
+  regions:
+    - name: "us-east4"
+      zones: ["us-east4-a", "us-east4-b", "us-east4-c"]
+    - name: "us-central1" 
+      zones: ["us-central1-a", "us-central1-b", "us-central1-c"]
+    - name: "europe-west1"
+      zones: ["europe-west1-b", "europe-west1-c", "europe-west1-d"]
+    - name: "europe-west3"
+      zones: ["europe-west3-a", "europe-west3-b", "europe-west3-c"]
+    - name: "asia-east2"
+      zones: ["asia-east2-a", "asia-east2-b", "asia-east2-c"]
+    - name: "asia-southeast1"
+      zones: ["asia-southeast1-a", "asia-southeast1-b", "asia-southeast1-c"]
+  
+  # VPC Networks per Carrier LLD: Separate Data and Management VPCs
+  vpc_networks:
+    # Data Plane VPC (nic0) - Palo Alto VM-Series ingress/egress traffic
+    data:
+      name: "global-security-vpc-data"
+      description: "Palo Alto VM-Series data plane - In-band NSI traffic inspection"
+      auto_create_subnetworks: false
+      routing_mode: "GLOBAL"
+      mtu: 1460
+      # Carrier LLD IP Allocation: 10.154.8.0/21 for Security VPC Data
+      subnets:
+        - name: "useast4-security-data-subnet"
+          ip_cidr_range: "10.154.8.0/24"
+          region: "us-east4"
+        - name: "uscentral1-security-data-subnet"
+          ip_cidr_range: "10.154.9.0/24"
+          region: "us-central1"
+        - name: "euwest1-security-data-subnet"
+          ip_cidr_range: "10.154.10.0/24"
+          region: "europe-west1"
+        - name: "euwest3-security-data-subnet"
+          ip_cidr_range: "10.154.11.0/24"
+          region: "europe-west3"
+        - name: "apeast2-security-data-subnet"
+          ip_cidr_range: "10.154.12.0/24"
+          region: "asia-east2"
+        - name: "apsoutheast1-security-data-subnet"
+          ip_cidr_range: "10.154.13.0/24"
+          region: "asia-southeast1"
+    
+    # Management Plane VPC (nic1) - Palo Alto management via StrataCom
+    management:
+      name: "global-security-vpc-mgmt"
+      description: "Palo Alto VM-Series management plane - StrataCom access"
+      auto_create_subnetworks: false
+      routing_mode: "GLOBAL"
+      mtu: 1460
+      # Carrier LLD IP Allocation: 10.154.16.0/21 for Security VPC Management
+      subnets:
+        - name: "useast4-security-mgmt-subnet"
+          ip_cidr_range: "10.154.16.0/24"
+          region: "us-east4"
+        - name: "uscentral1-security-mgmt-subnet"
+          ip_cidr_range: "10.154.17.0/24"
+          region: "us-central1"
+        - name: "euwest1-security-mgmt-subnet"
+          ip_cidr_range: "10.154.18.0/24"
+          region: "europe-west1"
+        - name: "euwest3-security-mgmt-subnet"
+          ip_cidr_range: "10.154.19.0/24"
+          region: "europe-west3"
+        - name: "apeast2-security-mgmt-subnet"
+          ip_cidr_range: "10.154.20.0/24"
+          region: "asia-east2"
+        - name: "apsoutheast1-security-mgmt-subnet"
+          ip_cidr_range: "10.154.21.0/24"
+          region: "asia-southeast1"
+
+  # NSI In-band Specifications per Carrier LLD
+  nsi_specifications:
+    encapsulation_protocol: "Geneve"
+    udp_port: 6081  # Standard Geneve destination port
+    metadata: "TLV"  # Type-Length-Value includes Source/Dest VPC info
+    inspection_model: "Centralized Fleet (NSI Producer)"
+    enforcement_point: "Palo Alto VM-Series (Layer 3-7 inspection)"
+    interception_type: "In-band hypervisor interception forwarding to ILB"
+  
+  # Intercept Deployment Group (Global - one per major region group)
+  intercept_deployment_groups:
+    - name: "nsi-inband-americas-deployment-group"
+      location: "us-central1"
+      description: "Americas region in-band packet inspection deployment group"
+    - name: "nsi-inband-emea-deployment-group"
+      location: "europe-west1" 
+      description: "EMEA region in-band packet inspection deployment group"
+    - name: "nsi-inband-apac-deployment-group"
+      location: "asia-southeast1"
+      description: "APAC region in-band packet inspection deployment group"
+    labels:
+      environment: "production"
+      managed-by: "terraform"
+      service: "nsi-inband"
+    
+    # IAM principals that can use this deployment group (consumer service accounts)
+    external_user_principals:
+      - "serviceAccount:consumer-sa@network-security-consumer.iam.gserviceaccount.com"
+
+  # Zonal Intercept Deployments
+  intercept_deployments:
+    - name: "intercept-deployment-a"
+      zone: "us-central1-a"
+      description: "Zonal intercept deployment in us-central1-a"
+      
+    - name: "intercept-deployment-b"
+      zone: "us-central1-b"
+      description: "Zonal intercept deployment in us-central1-b"
+
+  # Internal Passthrough Network Load Balancers
+  load_balancers:
+    - name: "inspection-nlb-a"
+      region: "us-central1"
+      zone: "us-central1-a"
+      subnet_name: "inspection-data-subnet"
+      backend_protocol: "UDP"
+      health_check:
+        protocol: "TCP"
+        port: 22
+        interval_sec: 10
+        timeout_sec: 5
+        healthy_threshold: 2
+        unhealthy_threshold: 3
+      enable_failover: true
+      allow_global_access: true
+      # Gateway IPs per Carrier LLD Model VPC Reserved Pools
+      # GENEVE traffic originates from these consumer subnet gateways
+      consumer_subnet_gateway_ips:
+        # M1P (Model 1 Production) - 6 regions
+        - "10.150.0.1"   # M1P us-east4 (10.150.0.0/16 pool)
+        - "10.100.0.1"   # M1P us-central1 (10.100.0.0/16 pool)
+        - "10.177.0.1"   # M1P europe-west1 (10.177.0.0/16 pool)
+        - "10.173.0.1"   # M1P europe-west3 (10.173.0.0/16 pool)
+        - "10.115.0.1"   # M1P asia-east2 (10.115.0.0/16 pool)
+        - "10.109.0.1"   # M1P asia-southeast1 (10.109.0.0/16 pool)
+        # M1NP (Model 1 Non-Production)
+        - "10.151.0.1"   # M1NP us-east4
+        - "10.101.0.1"   # M1NP us-central1
+        - "10.178.0.1"   # M1NP europe-west1
+        - "10.174.0.1"   # M1NP europe-west3
+        - "10.116.0.1"   # M1NP asia-east2
+        - "10.110.0.1"   # M1NP asia-southeast1
+        # M3P (Model 3 Production - DMZ/Ingress)
+        - "10.152.0.1"   # M3P us-east4
+        - "10.102.0.1"   # M3P us-central1
+        - "10.179.0.1"   # M3P europe-west1
+        - "10.175.0.1"   # M3P europe-west3
+        - "10.117.0.1"   # M3P asia-east2
+        - "10.111.0.1"   # M3P asia-southeast1
+        # M3NP (Model 3 Non-Production)
+        - "10.153.0.1"   # M3NP us-east4
+        - "10.103.0.1"   # M3NP us-central1
+        - "10.179.128.1" # M3NP europe-west1
+        - "10.175.128.1" # M3NP europe-west3
+        - "10.117.128.1" # M3NP asia-east2
+        - "10.111.0.1"   # M3NP asia-southeast1
+      
+    - name: "inspection-nlb-b"
+      region: "us-central1"
+      zone: "us-central1-b"
+      subnet_name: "inspection-data-subnet"
+      backend_protocol: "UDP"
+      health_check:
+        protocol: "TCP"
+        port: 22
+        interval_sec: 10
+        timeout_sec: 5
+        healthy_threshold: 2
+        unhealthy_threshold: 3
+      enable_failover: true
+      allow_global_access: true
+      consumer_subnet_gateway_ips:
+        - "10.150.0.1"
+        - "10.100.0.1"
+        - "10.151.0.1"
+        - "10.101.0.1"
+
+  # Palo Alto NGFW Packet Inspection VMs
+  packet_inspection_vms:
+    - name: "palo-alto-mig-a"
+      zone: "us-central1-a"
+      machine_type: "n2-standard-4"
+      target_size: 2
+      mgmt_subnet_name: "inspection-mgmt-subnet"
+      data_subnet_name: "inspection-data-subnet"
+      mgmt_interface_has_external_ip: false
+      data_interface_has_external_ip: false
+      
+      # Palo Alto VM-Series image
+      image: "https://www.googleapis.com/compute/v1/projects/paloaltonetworksgcp-public/global/images/vmseries-flex-byol-1110"
+      boot_disk_size_gb: 60
+      boot_disk_type: "pd-ssd"
+      
+      # Autoscaling configuration
+      enable_autoscaling: true
+      autoscaling_min_replicas: 2
+      autoscaling_max_replicas: 6
+      autoscaling_cpu_target: 0.7
+      autoscaling_cooldown_period: 300
+      
+      # Bootstrap bucket for configuration
+      bootstrap_bucket_name: "palo-alto-bootstrap-a"
+      
+    - name: "palo-alto-mig-b"
+      zone: "us-central1-b"
+      machine_type: "n2-standard-4"
+      target_size: 2
+      mgmt_subnet_name: "inspection-mgmt-subnet"
+      data_subnet_name: "inspection-data-subnet"
+      mgmt_interface_has_external_ip: false
+      data_interface_has_external_ip: false
+      image: "https://www.googleapis.com/compute/v1/projects/paloaltonetworksgcp-public/global/images/vmseries-flex-byol-1110"
+      boot_disk_size_gb: 60
+      boot_disk_type: "pd-ssd"
+      enable_autoscaling: true
+      autoscaling_min_replicas: 2
+      autoscaling_max_replicas: 6
+      autoscaling_cpu_target: 0.7
+      autoscaling_cooldown_period: 300
+      bootstrap_bucket_name: "palo-alto-bootstrap-b"
+
+  # Service Account for Palo Alto VMs
+  service_account:
+    account_id: "palo-alto-vm-sa"
+    display_name: "Palo Alto VM Service Account"
+    description: "Service account for Palo Alto NGFW VMs"
+    roles:
+      - "roles/logging.logWriter"
+      - "roles/monitoring.metricWriter"
+      - "roles/storage.objectViewer"
+
+  # Common labels
+  labels:
+    environment: "production"
+    managed-by: "terraform"
+    service: "nsi-inband-producer"
+    cost-center: "network-security"

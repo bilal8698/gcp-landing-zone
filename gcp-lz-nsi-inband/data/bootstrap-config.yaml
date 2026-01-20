@@ -1,0 +1,117 @@
+# Bootstrap Configuration for Palo Alto NGFW VMs
+# This configuration is used to create GCS buckets and bootstrap files
+
+bootstrap:
+  project_id: "network-security-producer"
+  location: "US"
+  
+  # Bootstrap buckets (one per zone/MIG)
+  buckets:
+    - name: "palo-alto-bootstrap-a-12345"
+      zone: "us-central1-a"
+      force_destroy: false
+      lifecycle_age_days: 365
+      
+      # Firewall configuration
+      firewall_config:
+        hostname: "paloalto-fw-a"
+        
+        # Panorama management (if used)
+        panorama:
+          server: "panorama.example.com"
+          server2: "panorama2.example.com"
+          template_name: "NSI-Inband-Template"
+          device_group_name: "NSI-Inband-DG"
+          # vm_auth_key should be set via Terraform variables, not in YAML
+          vm_auth_key: ""  # Set via TF_VAR_vm_auth_key
+        
+        # DNS configuration
+        dns:
+          primary: "169.254.169.254"    # Google Cloud DNS
+          secondary: "8.8.8.8"
+        
+        # NTP configuration
+        ntp:
+          primary: "metadata.google.internal"
+          secondary: "time.google.com"
+        
+        # Timezone
+        timezone: "US/Eastern"
+        
+        # Login banner
+        login_banner: |
+          ****************************************
+          *  Authorized Access Only             *
+          *  All activity is monitored & logged *
+          ****************************************
+        
+        # Operation command modes
+        op_command_modes: "mgmt-interface-swap"
+        
+        # VM-Series auto-registration
+        vm_series_auto_registration: "yes"
+      
+      # License authcodes (set via Terraform variables)
+      authcodes: {}
+      
+      # Additional content files to upload
+      content_files: {}
+      
+      # Software files to upload
+      software_files: {}
+      
+      labels:
+        zone: "us-central1-a"
+        managed-by: "terraform"
+    
+    - name: "palo-alto-bootstrap-b-12345"
+      zone: "us-central1-b"
+      force_destroy: false
+      lifecycle_age_days: 365
+      
+      firewall_config:
+        hostname: "paloalto-fw-b"
+        panorama:
+          server: "panorama.example.com"
+          server2: "panorama2.example.com"
+          template_name: "NSI-Inband-Template"
+          device_group_name: "NSI-Inband-DG"
+          vm_auth_key: ""
+        dns:
+          primary: "169.254.169.254"
+          secondary: "8.8.8.8"
+        ntp:
+          primary: "metadata.google.internal"
+          secondary: "time.google.com"
+        timezone: "US/Eastern"
+        login_banner: |
+          ****************************************
+          *  Authorized Access Only             *
+          *  All activity is monitored & logged *
+          ****************************************
+        op_command_modes: "mgmt-interface-swap"
+        vm_series_auto_registration: "yes"
+      
+      authcodes: {}
+      content_files: {}
+      software_files: {}
+      
+      labels:
+        zone: "us-central1-b"
+        managed-by: "terraform"
+
+  # Service account for VM access to bootstrap buckets
+  service_account_email: "palo-alto-vm-sa@network-security-producer.iam.gserviceaccount.com"
+
+  # Common labels
+  labels:
+    environment: "production"
+    managed-by: "terraform"
+    service: "palo-alto-bootstrap"
+
+# Notes:
+# 1. Sensitive values (vm_auth_key, authcodes) should be passed via Terraform variables
+# 2. Bootstrap bucket names must be globally unique - append random suffix
+# 3. Update service_account_email to match your actual service account
+# 4. Panorama configuration is optional - remove if not used
+# 5. For production, set force_destroy: false to prevent accidental deletion

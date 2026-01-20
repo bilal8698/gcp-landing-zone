@@ -1,0 +1,346 @@
+# Consumer Configuration for NSI In-band Integration
+# This configuration defines how consumer VPCs use producer's packet inspection services
+
+consumer:
+  # Carrier LLD: Multiple consumer projects for different models
+  projects:
+    m1p: "global-host-m1p"  # Model 1 Production
+    m1np: "global-host-m1np"  # Model 1 Non-Production
+    m3p: "global-host-m3p"  # Model 3 Production (DMZ)
+    m3np: "global-host-m3np"  # Model 3 Non-Production
+  organization_id: "123456789012"  # Update with actual Carrier org ID
+  # Active-Active deployment across all 6 regions per Carrier LLD
+  regions:
+    - "us-east4"
+    - "us-central1"
+    - "europe-west1"
+    - "europe-west3"
+    - "asia-east2"
+    - "asia-southeast1"
+  
+  # Producer connection details per Carrier LLD
+  producer:
+    project_id: "global-security-project"  # network-security per Carrier LLD
+    deployment_groups:
+      americas:
+        name: "nsi-inband-americas-deployment-group"
+        location: "us-central1"
+        full_name: "projects/global-security-project/locations/us-central1/interceptDeploymentGroups/nsi-inband-americas-deployment-group"
+      emea:
+        name: "nsi-inband-emea-deployment-group"
+        location: "europe-west1"
+        full_name: "projects/global-security-project/locations/europe-west1/interceptDeploymentGroups/nsi-inband-emea-deployment-group"
+      apac:
+        name: "nsi-inband-apac-deployment-group"
+        location: "asia-southeast1"
+        full_name: "projects/global-security-project/locations/asia-southeast1/interceptDeploymentGroups/nsi-inband-apac-deployment-group"
+
+  # Consumer VPC Networks - Carrier LLD Spoke Configuration
+  vpc_networks:
+    - name: "global-host-m1p-vpc"  # spoke-m1p
+      project_id: "global-host-m1p"
+      firewall_policy_enforcement_order: "BEFORE_CLASSIC_FIREWALL"
+      description: "Model 1 Production Workloads - All 6 Regions"
+      ncc_spoke_name: "spoke-m1p"
+      
+    - name: "global-host-m1np-vpc"  # spoke-m1np
+      project_id: "global-host-m1np"
+      firewall_policy_enforcement_order: "BEFORE_CLASSIC_FIREWALL"
+      description: "Model 1 Non-Prod Workloads - All 6 Regions"
+      ncc_spoke_name: "spoke-m1np"
+      
+    - name: "global-host-m3p-vpc"  # spoke-m3p
+      project_id: "global-host-m3p"
+      firewall_policy_enforcement_order: "BEFORE_CLASSIC_FIREWALL"
+      description: "Model 3 Production Workloads (DMZ/Ingress) - All 6 Regions"
+      ncc_spoke_name: "spoke-m3p"
+      
+    - name: "global-host-m3np-vpc"  # spoke-m3np
+      project_id: "global-host-m3np"
+      firewall_policy_enforcement_order: "BEFORE_CLASSIC_FIREWALL"
+      description: "Model 3 Non-Prod Workloads - All 6 Regions"
+      ncc_spoke_name: "spoke-m3np"
+
+  # Intercept Endpoint Group
+  intercept_endpoint_group:
+    name: "consumer-endpoint-group"
+    location: "us-central1"
+    description: "Consumer endpoint group for in-band packet inspection"
+    labels:
+      environment: "production"
+      managed-by: "terraform"
+      service: "nsi-inband-consumer"
+
+  # Security Profile
+  security_profile:
+    name: "custom-intercept-profile"
+    location: "global"
+    description: "Custom threat prevention profile for in-band inspection"
+    
+    # Severity level overrides
+    severity_overrides:
+      - action: "ALLOW"
+        severity: "INFORMATIONAL"
+      - action: "ALLOW"
+        severity: "LOW"
+      - action: "ALERT"
+        severity: "MEDIUM"
+      - action: "DENY"
+        severity: "HIGH"
+      - action: "DENY"
+        severity: "CRITICAL"
+    
+    # Specific threat overrides (optional)
+    threat_overrides: []
+    
+    labels:
+      environment: "production"
+      managed-by: "terraform"
+
+  # Security Profile Group
+  security_profile_group:
+    name: "nsi-inband-profile-group"
+    location: "global"
+    description: "Security profile group for NSI in-band inspection"
+    labels:
+      environment: "production"
+      managed-by: "terraform"
+
+  # Firewall Policies
+  firewall_policies:
+    - name: "nsi-inband-global-policy"
+      type: "global"  # or "hierarchical"
+      description: "Global firewall policy for NSI in-band traffic inspection"
+      
+      # VPC networks to associate with this policy (for global policies)
+      vpc_networks:
+        - "global-host-m1p-vpc"
+        - "global-host-m1np-vpc"
+        - "global-host-m3p-vpc"
+      
+      # Firewall rules - Per Carrier LLD Firewall Policy Logic Matrix
+      rules:
+        # Rule 1: M1P to M1NP - Inspect (Cross-environment traffic)
+        - priority: 1000
+          action: "apply_security_profile_group"
+          direction: "EGRESS"
+          description: "Carrier LLD: Inspect M1P to M1NP traffic"
+          match:
+            src_ip_ranges:
+              - "10.150.0.0/16"  # M1P us-east4
+              - "10.100.0.0/16"  # M1P us-central1
+              - "10.177.0.0/16"  # M1P europe-west1
+              - "10.173.0.0/16"  # M1P europe-west3
+              - "10.115.0.0/16"  # M1P asia-east2
+              - "10.109.0.0/16"  # M1P asia-southeast1
+            dest_ip_ranges:
+              - "10.151.0.0/16"  # M1NP ranges
+              - "10.101.0.0/16"
+              - "10.178.0.0/16"
+              - "10.174.0.0/16"
+              - "10.116.0.0/16"
+              - "10.110.0.0/16"
+            layer4_configs:
+              - ip_protocol: "all"
+          security_profile_group_name: "nsi-inband-profile-group"
+          disabled: false
+        
+        # Rule 2: M1P to M3P - Inspect (Cross-model traffic)
+        - priority: 1100
+          action: "apply_security_profile_group"
+          direction: "EGRESS"
+          description: "Carrier LLD: Inspect M1P to M3P traffic"
+          match:
+            src_ip_ranges:
+              - "10.150.0.0/16"
+              - "10.100.0.0/16"
+              - "10.177.0.0/16"
+              - "10.173.0.0/16"
+              - "10.115.0.0/16"
+              - "10.109.0.0/16"
+            dest_ip_ranges:
+              - "10.152.0.0/16"  # M3P ranges
+              - "10.102.0.0/16"
+              - "10.179.0.0/17"
+              - "10.175.0.0/17"
+              - "10.117.0.0/17"
+              - "10.111.0.0/17"
+            layer4_configs:
+              - ip_protocol: "all"
+          security_profile_group_name: "nsi-inband-profile-group"
+          disabled: false
+        
+        # Rule 3: M1P to M3NP - Inspect
+        - priority: 1200
+          action: "apply_security_profile_group"
+          direction: "EGRESS"
+          description: "Carrier LLD: Inspect M1P to M3NP traffic"
+          match:
+            src_ip_ranges:
+              - "10.150.0.0/16"
+              - "10.100.0.0/16"
+              - "10.177.0.0/16"
+              - "10.173.0.0/16"
+              - "10.115.0.0/16"
+              - "10.109.0.0/16"
+            dest_ip_ranges:
+              - "10.153.0.0/16"  # M3NP ranges
+              - "10.103.0.0/16"
+              - "10.179.128.0/17"
+              - "10.175.128.0/17"
+              - "10.117.128.0/17"
+              - "10.111.0.0/17"
+            layer4_configs:
+              - ip_protocol: "all"
+          security_profile_group_name: "nsi-inband-profile-group"
+          disabled: false
+        
+        # Rule 4: M1NP to M3P - Inspect
+        - priority: 1300
+          action: "apply_security_profile_group"
+          direction: "EGRESS"
+          description: "Carrier LLD: Inspect M1NP to M3P traffic"
+          match:
+            src_ip_ranges:
+              - "10.151.0.0/16"
+              - "10.101.0.0/16"
+              - "10.178.0.0/16"
+              - "10.174.0.0/16"
+              - "10.116.0.0/16"
+              - "10.110.0.0/16"
+            dest_ip_ranges:
+              - "10.152.0.0/16"
+              - "10.102.0.0/16"
+              - "10.179.0.0/17"
+              - "10.175.0.0/17"
+              - "10.117.0.0/17"
+              - "10.111.0.0/17"
+            layer4_configs:
+              - ip_protocol: "all"
+          security_profile_group_name: "nsi-inband-profile-group"
+          disabled: false
+        
+        # Rule 5: M1NP to M3NP - Inspect
+        - priority: 1400
+          action: "apply_security_profile_group"
+          direction: "EGRESS"
+          description: "Carrier LLD: Inspect M1NP to M3NP traffic"
+          match:
+            src_ip_ranges:
+              - "10.151.0.0/16"
+              - "10.101.0.0/16"
+              - "10.178.0.0/16"
+              - "10.174.0.0/16"
+              - "10.116.0.0/16"
+              - "10.110.0.0/16"
+            dest_ip_ranges:
+              - "10.153.0.0/16"
+              - "10.103.0.0/16"
+              - "10.179.128.0/17"
+              - "10.175.128.0/17"
+              - "10.117.128.0/17"
+              - "10.111.0.0/17"
+            layer4_configs:
+              - ip_protocol: "all"
+          security_profile_group_name: "nsi-inband-profile-group"
+          disabled: false
+        
+        # Rule 6: M3P to ANY - Inspect (DMZ egress)
+        - priority: 1500
+          action: "apply_security_profile_group"
+          direction: "EGRESS"
+          description: "Carrier LLD: Inspect all M3P egress traffic"
+          match:
+            src_ip_ranges:
+              - "10.152.0.0/16"
+              - "10.102.0.0/16"
+              - "10.179.0.0/17"
+              - "10.175.0.0/17"
+              - "10.117.0.0/17"
+              - "10.111.0.0/17"
+            dest_ip_ranges:
+              - "0.0.0.0/0"
+            layer4_configs:
+              - ip_protocol: "all"
+          security_profile_group_name: "nsi-inband-profile-group"
+          disabled: false
+        
+        # Rule 7: M3NP to ANY - Inspect
+        - priority: 1600
+          action: "apply_security_profile_group"
+          direction: "EGRESS"
+          description: "Carrier LLD: Inspect all M3NP egress traffic"
+          match:
+            src_ip_ranges:
+              - "10.153.0.0/16"
+              - "10.103.0.0/16"
+              - "10.179.128.0/17"
+              - "10.175.128.0/17"
+              - "10.117.128.0/17"
+              - "10.111.0.0/17"
+            dest_ip_ranges:
+              - "0.0.0.0/0"
+            layer4_configs:
+              - ip_protocol: "all"
+          security_profile_group_name: "nsi-inband-profile-group"
+          disabled: false
+        
+        # Rule 8: Internet to M3P/M3NP - Inspect (Ingress to DMZ)
+        - priority: 1700
+          action: "apply_security_profile_group"
+          direction: "INGRESS"
+          description: "Carrier LLD: Inspect Internet traffic to M3P/M3NP (DMZ ingress)"
+          match:
+            src_ip_ranges:
+              - "0.0.0.0/0"
+            dest_ip_ranges:
+              - "10.152.0.0/16"  # M3P
+              - "10.102.0.0/16"
+              - "10.179.0.0/17"
+              - "10.175.0.0/17"
+              - "10.117.0.0/17"
+              - "10.111.0.0/17"
+              - "10.153.0.0/16"  # M3NP
+              - "10.103.0.0/16"
+              - "10.179.128.0/17"
+              - "10.175.128.0/17"
+              - "10.117.128.0/17"
+              - "10.111.0.0/17"
+            layer4_configs:
+              - ip_protocol: "tcp"
+                ports: ["80", "443", "8080", "8443"]
+          security_profile_group_name: "nsi-inband-profile-group"
+          disabled: false
+        
+        # Rule 9: Allow health check traffic (bypass inspection)
+        - priority: 900
+          action: "allow"
+          direction: "INGRESS"
+          description: "Allow Google health check traffic without inspection"
+          match:
+            src_ip_ranges:
+              - "35.191.0.0/16"
+              - "130.211.0.0/22"
+            dest_ip_ranges:
+              - "10.0.0.0/8"
+            layer4_configs:
+              - ip_protocol: "tcp"
+          disabled: false
+        
+        # Note: Carrier LLD specifies Intra-VPC traffic (M1P to M1P, M1NP to M1NP) is NA (not inspected)
+
+  # Service Account for consumer operations
+  service_account:
+    account_id: "nsi-consumer-sa"
+    display_name: "NSI Consumer Service Account"
+    description: "Service account for NSI consumer operations"
+    roles:
+      - "roles/networksecurity.interceptDeploymentUser"
+      - "roles/compute.networkViewer"
+
+  # Common labels
+  labels:
+    environment: "production"
+    managed-by: "terraform"
+    service: "nsi-inband-consumer"
+    cost-center: "network-security"

@@ -1,0 +1,49 @@
+# Example terraform.tfvars for consumer
+# Copy this file to terraform.tfvars and update with your values
+
+project_id      = "network-security-consumer"
+organization_id = "123456789012"
+region          = "us-central1"
+
+service_account_id           = "nsi-consumer-sa"
+service_account_display_name = "NSI Consumer Service Account"
+service_account_roles = [
+  "roles/networksecurity.interceptDeploymentUser",
+  "roles/compute.networkViewer"
+]
+
+producer_project_id                   = "network-security-producer"
+producer_deployment_group_name        = "nsi-inband-deployment-group"
+producer_deployment_group_location    = "us-central1"
+producer_deployment_group_full_name   = "projects/network-security-producer/locations/us-central1/interceptDeploymentGroups/nsi-inband-deployment-group"
+
+vpc_network_names = [
+  "global-host-m1p-vpc",
+  "global-host-m1np-vpc",
+  "global-host-m3p-vpc"
+]
+
+intercept_endpoint_group_name        = "consumer-endpoint-group"
+intercept_endpoint_group_description = "Consumer endpoint group for in-band packet inspection"
+
+security_profile_name        = "custom-intercept-profile"
+security_profile_location    = "global"
+security_profile_description = "Custom threat prevention profile for in-band inspection"
+
+security_profile_severity_overrides = [
+  { action = "ALLOW", severity = "INFORMATIONAL" },
+  { action = "ALLOW", severity = "LOW" },
+  { action = "ALERT", severity = "MEDIUM" },
+  { action = "DENY", severity = "HIGH" },
+  { action = "DENY", severity = "CRITICAL" }
+]
+
+security_profile_group_name        = "nsi-inband-profile-group"
+security_profile_group_location    = "global"
+security_profile_group_description = "Security profile group for NSI in-band inspection"
+
+labels = {
+  environment = "production"
+  managed-by  = "terraform"
+  service     = "nsi-inband-consumer"
+}

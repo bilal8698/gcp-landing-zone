@@ -1,0 +1,33 @@
+# Example terraform.tfvars for producer
+# Copy this file to terraform.tfvars and update with your values
+
+project_id = "network-security-producer"
+region     = "us-central1"
+zones      = ["us-central1-a", "us-central1-b"]
+
+vpc_network_name = "producer-inspection-vpc"
+
+service_account_id           = "palo-alto-vm-sa"
+service_account_display_name = "Palo Alto VM Service Account"
+service_account_roles = [
+  "roles/logging.logWriter",
+  "roles/monitoring.metricWriter",
+  "roles/storage.objectViewer"
+]
+
+intercept_deployment_group_name        = "nsi-inband-deployment-group"
+intercept_deployment_group_description = "Regional intercept deployment group for in-band packet inspection"
+
+external_user_principals = [
+  "serviceAccount:consumer-sa@network-security-consumer.iam.gserviceaccount.com"
+]
+
+# Sensitive variables - set via environment variables:
+# export TF_VAR_vm_auth_key="your-panorama-auth-key"
+# export TF_VAR_authcodes='{"license1": "authcode1"}'
+
+labels = {
+  environment = "production"
+  managed-by  = "terraform"
+  service     = "nsi-inband-producer"
+}

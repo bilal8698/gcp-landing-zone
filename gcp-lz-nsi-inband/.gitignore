@@ -1,0 +1,80 @@
+# .gitignore for GCP NSI In-band Project
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Terraform plan files
+*.tfplan
+tfplan
+
+# Local .terraform directories
+.terraform/
+.terraform.lock.hcl
+
+# Sensitive files
+**/bootstrap-config-custom.yaml
+**/producer-config-custom.yaml
+**/consumer-config-custom.yaml
+**/*-custom.yaml
+*.key
+*.pem
+authcodes*
+*.license
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS files
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Node
+node_modules/
+package-lock.json
+yarn.lock
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# GCP credentials
+*.json
+!*example*.json
+credentials/
