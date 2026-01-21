@@ -22,13 +22,3 @@ output "forwarding_rule_ip_address" {
   description = "IP address of the forwarding rule"
   value       = google_compute_forwarding_rule.main.ip_address
 }
-
-output "health_check_id" {
-  description = "ID of the health check"
-  value       = google_compute_health_check.main.id
-}
-
-output "health_check_self_link" {
-  description = "Self link of the health check"
-  value       = google_compute_health_check.main.self_link
-}

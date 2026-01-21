@@ -1,21 +1,6 @@
 # Producer Service - Main Terraform Configuration
 # Deploys NSI in-band packet inspection infrastructure
 
-terraform {
-  required_version = ">= 1.5.0"
-  
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 5.0"
-    }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = "~> 5.0"
-    }
-  }
-}
-
 provider "google" {
   project = var.project_id
   region  = var.region
@@ -37,7 +22,7 @@ resource "google_service_account" "palo_alto_vm" {
 # IAM roles for service account
 resource "google_project_iam_member" "palo_alto_vm_roles" {
   for_each = toset(var.service_account_roles)
-  
+
   project = var.project_id
   role    = each.value
   member  = "serviceAccount:${google_service_account.palo_alto_vm.email}"
@@ -74,19 +59,61 @@ module "bootstrap" {
   labels    = merge(var.labels, each.value.labels)
 }
 
-# Intercept Deployment Group
-module "intercept_deployment_group" {
-  source = "../modules/intercept-deployment-group"
+# Health Checks (created first to avoid circular dependency)
+resource "google_compute_health_check" "palo_alto" {
+  for_each = { for lb in var.load_balancers : lb.name => lb }
 
-  project_id  = var.project_id
-  name        = var.intercept_deployment_group_name
-  location    = var.region
-  description = var.intercept_deployment_group_description
+  name    = "${each.value.name}-health-check"
+  project = var.project_id
 
-  external_user_principals = var.external_user_principals
+  check_interval_sec  = each.value.health_check.interval_sec
+  timeout_sec         = each.value.health_check.timeout_sec
+  healthy_threshold   = each.value.health_check.healthy_threshold
+  unhealthy_threshold = each.value.health_check.unhealthy_threshold
 
-  labels = var.labels
+  dynamic "tcp_health_check" {
+    for_each = each.value.health_check.protocol == "TCP" ? [1] : []
+    content {
+      port         = each.value.health_check.port
+      proxy_header = "NONE"
+    }
+  }
+
+  dynamic "http_health_check" {
+    for_each = each.value.health_check.protocol == "HTTP" ? [1] : []
+    content {
+      port         = each.value.health_check.port
+      request_path = try(each.value.health_check.request_path, "/api/health-check")
+      proxy_header = "NONE"
+    }
+  }
+
+  dynamic "https_health_check" {
+    for_each = each.value.health_check.protocol == "HTTPS" ? [1] : []
+    content {
+      port         = each.value.health_check.port
+      request_path = try(each.value.health_check.request_path, "/api/health-check")
+      proxy_header = "NONE"
+    }
+  }
 }
+
+# NOTE: NSI API resources commented out for initial testing
+# These require google-beta provider with NSI API access enabled
+
+# Intercept Deployment Group
+# module "intercept_deployment_group" {
+#   source = "../modules/intercept-deployment-group"
+#
+#   project_id  = var.project_id
+#   name        = var.intercept_deployment_group_name
+#   location    = var.region
+#   description = var.intercept_deployment_group_description
+#
+#   external_user_principals = var.external_user_principals
+#
+#   labels = var.labels
+# }
 
 # Packet Inspection VMs (Managed Instance Groups)
 module "packet_inspection_vms" {
@@ -112,8 +139,8 @@ module "packet_inspection_vms" {
   service_account_email = google_service_account.palo_alto_vm.email
   bootstrap_bucket_url  = module.bootstrap[each.value.bootstrap_bucket_name].bucket_url
 
-  target_size                   = each.value.target_size
-  health_check_self_link        = module.internal_nlb[each.value.nlb_name].health_check_self_link
+  target_size                    = each.value.target_size
+  health_check_self_link         = google_compute_health_check.palo_alto[each.value.nlb_name].self_link
   auto_healing_initial_delay_sec = 600
 
   enable_autoscaling          = each.value.enable_autoscaling
@@ -146,12 +173,7 @@ module "internal_nlb" {
     }
   ]
 
-  health_check_protocol          = each.value.health_check.protocol
-  health_check_port              = each.value.health_check.port
-  health_check_interval_sec      = each.value.health_check.interval_sec
-  health_check_timeout_sec       = each.value.health_check.timeout_sec
-  health_check_healthy_threshold = each.value.health_check.healthy_threshold
-  health_check_unhealthy_threshold = each.value.health_check.unhealthy_threshold
+  health_check_self_link = google_compute_health_check.palo_alto[each.key].self_link
 
   enable_failover     = each.value.enable_failover
   allow_global_access = each.value.allow_global_access
@@ -162,19 +184,19 @@ module "internal_nlb" {
 }
 
 # Zonal Intercept Deployments
-module "intercept_deployment" {
-  source   = "../modules/intercept-deployment"
-  for_each = { for d in var.intercept_deployments : d.name => d }
-
-  project_id  = var.project_id
-  name        = each.value.name
-  zone        = each.value.zone
-  description = each.value.description
-
-  intercept_deployment_group_name = module.intercept_deployment_group.name
-  forwarding_rule_self_link       = module.internal_nlb[each.value.nlb_name].forwarding_rule_self_link
-
-  labels = var.labels
-
-  depends_on = [module.intercept_deployment_group, module.internal_nlb]
-}
+# module "intercept_deployment" {
+#   source   = "../modules/intercept-deployment"
+#   for_each = { for d in var.intercept_deployments : d.name => d }
+#
+#   project_id  = var.project_id
+#   name        = each.value.name
+#   zone        = each.value.zone
+#   description = each.value.description
+#
+#   intercept_deployment_group_name = module.intercept_deployment_group.name
+#   forwarding_rule_self_link       = module.internal_nlb[each.value.nlb_name].forwarding_rule_self_link
+#
+#   labels = var.labels
+#
+#   depends_on = [module.intercept_deployment_group, module.internal_nlb]
+# }

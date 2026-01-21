@@ -45,46 +45,9 @@ variable "instance_groups" {
   }))
 }
 
-variable "health_check_protocol" {
-  description = "Protocol for health checks (TCP, HTTP, or HTTPS)"
+variable "health_check_self_link" {
+  description = "Self link of an existing health check resource"
   type        = string
-  default     = "TCP"
-}
-
-variable "health_check_port" {
-  description = "Port for health checks"
-  type        = number
-  default     = 22
-}
-
-variable "health_check_request_path" {
-  description = "Request path for HTTP/HTTPS health checks"
-  type        = string
-  default     = "/"
-}
-
-variable "health_check_interval_sec" {
-  description = "Health check interval in seconds"
-  type        = number
-  default     = 10
-}
-
-variable "health_check_timeout_sec" {
-  description = "Health check timeout in seconds"
-  type        = number
-  default     = 5
-}
-
-variable "health_check_healthy_threshold" {
-  description = "Number of consecutive successful health checks"
-  type        = number
-  default     = 2
-}
-
-variable "health_check_unhealthy_threshold" {
-  description = "Number of consecutive failed health checks"
-  type        = number
-  default     = 3
 }
 
 variable "connection_draining_timeout_sec" {

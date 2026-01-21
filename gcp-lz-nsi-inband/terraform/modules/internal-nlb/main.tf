@@ -1,43 +1,6 @@
 # Internal Passthrough Network Load Balancer Module
 # Creates an internal NLB for GENEVE-encapsulated traffic (UDP:6081)
 
-# Health check for the backend service
-resource "google_compute_health_check" "main" {
-  name    = "${var.name}-health-check"
-  project = var.project_id
-
-  check_interval_sec  = var.health_check_interval_sec
-  timeout_sec         = var.health_check_timeout_sec
-  healthy_threshold   = var.health_check_healthy_threshold
-  unhealthy_threshold = var.health_check_unhealthy_threshold
-
-  dynamic "tcp_health_check" {
-    for_each = var.health_check_protocol == "TCP" ? [1] : []
-    content {
-      port         = var.health_check_port
-      proxy_header = "NONE"
-    }
-  }
-
-  dynamic "http_health_check" {
-    for_each = var.health_check_protocol == "HTTP" ? [1] : []
-    content {
-      port         = var.health_check_port
-      request_path = var.health_check_request_path
-      proxy_header = "NONE"
-    }
-  }
-
-  dynamic "https_health_check" {
-    for_each = var.health_check_protocol == "HTTPS" ? [1] : []
-    content {
-      port         = var.health_check_port
-      request_path = var.health_check_request_path
-      proxy_header = "NONE"
-    }
-  }
-}
-
 # Backend service with instance group
 resource "google_compute_region_backend_service" "main" {
   name    = var.name
@@ -48,7 +11,7 @@ resource "google_compute_region_backend_service" "main" {
   load_balancing_scheme = "INTERNAL"
   network               = var.network_self_link
 
-  health_checks = [google_compute_health_check.main.id]
+  health_checks = [var.health_check_self_link]
 
   dynamic "backend" {
     for_each = var.instance_groups
@@ -91,27 +54,6 @@ resource "google_compute_forwarding_rule" "main" {
   allow_global_access = var.allow_global_access
 
   labels = var.labels
-}
-
-# Firewall rule to allow health check traffic
-resource "google_compute_firewall" "health_check" {
-  name    = "${var.name}-allow-health-check"
-  project = var.project_id
-  network = var.network_name
-
-  description = "Allow health check traffic from Google's health check ranges"
-
-  allow {
-    protocol = lower(var.health_check_protocol)
-    ports    = [var.health_check_port]
-  }
-
-  source_ranges = [
-    "35.191.0.0/16",
-    "130.211.0.0/22"
-  ]
-
-  target_tags = var.target_tags
 }
 
 # Firewall rule to allow GENEVE traffic from consumer subnets

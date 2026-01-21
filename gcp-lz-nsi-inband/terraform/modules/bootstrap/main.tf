@@ -79,7 +79,7 @@ resource "google_storage_bucket_object" "bootstrap_xml" {
 
 # Upload authcodes for licenses
 resource "google_storage_bucket_object" "authcodes" {
-  for_each = var.authcodes
+  for_each = nonsensitive(var.authcodes)
 
   name    = "license/authcodes"
   content = each.value

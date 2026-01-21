@@ -89,7 +89,6 @@ resource "google_compute_instance_group_manager" "palo_alto" {
     max_surge_fixed              = var.max_surge
     max_unavailable_fixed        = var.max_unavailable
     replacement_method           = "SUBSTITUTE"
-    instance_redistribution_type = "PROACTIVE"
   }
 
   lifecycle {

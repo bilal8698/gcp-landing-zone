@@ -1,17 +1,18 @@
-output "intercept_deployment_group_id" {
-  description = "ID of the intercept deployment group"
-  value       = module.intercept_deployment_group.id
-}
+# NOTE: NSI-specific outputs commented out for initial testing
+# output "intercept_deployment_group_id" {
+#   description = "ID of the intercept deployment group"
+#   value       = module.intercept_deployment_group.id
+# }
 
-output "intercept_deployment_group_name" {
-  description = "Name of the intercept deployment group"
-  value       = module.intercept_deployment_group.name
-}
+# output "intercept_deployment_group_name" {
+#   description = "Name of the intercept deployment group"
+#   value       = module.intercept_deployment_group.name
+# }
 
-output "intercept_deployment_ids" {
-  description = "Map of intercept deployment names to IDs"
-  value       = { for k, v in module.intercept_deployment : k => v.id }
-}
+# output "intercept_deployment_ids" {
+#   description = "Map of intercept deployment names to IDs"
+#   value       = { for k, v in module.intercept_deployment : k => v.id }
+# }
 
 output "load_balancer_ips" {
   description = "Map of load balancer names to IP addresses"
